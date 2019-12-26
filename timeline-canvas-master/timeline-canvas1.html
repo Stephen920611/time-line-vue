@@ -108,33 +108,36 @@
 
         //var time1 = new Date().getTime()-12*3600*1000;
 
-
         $("#toggleCell").click(function(){
             $("#timeline").TimeSlider('init',time1,_timecell);
         });
 
+        // 当天0点
+        var start = new Date(new Date(new Date().toLocaleDateString()).getTime()).getTime();
+        // 当天23:59
+        var end = new Date( new Date( new Date().toLocaleDateString() ).getTime() + 24 * 60 * 60 * 1000 - 1).getTime();
+
         var setTimeMove = null;
         //1秒延迟后设置到当前时间
         $("#setTimeMove").click(function(){
+            clearInterval(setTimeMove);
             setTimeMove = setInterval(function(){
                 /*模拟数据*/
                 var temporaryValue = [
                     {
-                        "beginTime":new Date().getTime()-3*3600*1000,
-                        "endTime":new Date().getTime(),
+                        "beginTime": start,
+                        "endTime": new Date().getTime(),
                         "style": {
                             "background":"rgba(132, 244, 180, 0.498039)"
                         }
                     },
                 ];
-                $("#timeline").TimeSlider('set_time_to_middle',new Date().getTime());
 
+                $("#timeline").TimeSlider('move_to_current_time', start, new Date().getTime(), end, temporaryValue);
             },1000)
         });
-        console.log('setTimeMove:最前面',setTimeMove);
 
         //TODO BUG
-        //清空定时器，暂时来讲不好使（bug）
         $("#stopTimeMove").click(function(){
             clearInterval(setTimeMove);
         });

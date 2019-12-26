@@ -5,12 +5,18 @@ var TimeSlider = function (elementId, options) {
     this.canVansH = this.canvas.height;
     this.timecell = options.init_cells;
 
+    //默认的当前天的0点
+    this.default_start_time = new Date(new Date(new Date().toLocaleDateString()).getTime()).getTime();
+    //默认的当前天的23点59分59秒
+    this.default_end_time = new Date( new Date( new Date().toLocaleDateString() ).getTime() + 24 * 60 * 60 * 1000 - 1).getTime();
+
     this.minutes_per_step = [1, 2, 5, 10, 15, 20, 30, 60, 120, 180, 240, 360, 720, 1440]; // min/格
     this.graduation_step = 20;//刻度间最小宽度，单位px
-    this.hours_per_ruler = 12.9;//时间轴显示24小时
+    this.hours_per_ruler = 24;//时间轴显示24小时
     //this.start_timestamp = new Date().getTime() - 12*60*60*1000;
     this.start_timestamp = new Date('2019-06-18 00:00:00').getTime();
     this.end_timestamp = new Date('2019-06-18 23:59:59').getTime();//新增代码
+    this.current_time = new Date().getTime();   //
     this.minTime = new Date('2019-06-18 00:00:00').getTime();
     this.maxTime = new Date('2019-06-18 23:59:59').getTime();
 
@@ -37,10 +43,14 @@ var TimeSlider = function (elementId, options) {
  * @param {*} start_timestamp 最左侧时间
  * @param {*} timecell 录像段数组
  * @param {*} redrawFlag 是否重绘标记 true是重绘， 第一次进入是false
+ * @param {*} current_time 当前时间
+ * @param {*} end_timestamp 最右侧时间
  */
-TimeSlider.prototype.init = function (start_timestamp, timecell, redrawFlag) {
+TimeSlider.prototype.init = function (start_timestamp, timecell, redrawFlag, current_time, end_timestamp) {
     this.timecell = timecell;
     this.start_timestamp = start_timestamp;
+    this.current_time = current_time;
+    this.end_timestamp = end_timestamp;
     //绘制录像块背景
     this.drawCellBg();
     //绘制添加最左侧刻度
@@ -49,14 +59,15 @@ TimeSlider.prototype.init = function (start_timestamp, timecell, redrawFlag) {
     this.add_cells(timecell);
     //画线
     this.drawLine(0, this.canVansH, this.canvansW, this.canVansH, "rgb(151, 158, 167)", 1); //底线
-    this.drawLine(this.canvansW / 2, 0, this.canvansW / 2, 33, "rgb(64, 196, 255", 2); //中间播放点时间线
+    // this.drawLine(this.canvansW / 2, 0, this.canvansW / 2, 33, "rgb(64, 196, 255", 2); //中间播放点时间线
+    this.drawLine(this.canvansW * ((current_time-start_timestamp) / (end_timestamp-start_timestamp)), 0, this.canvansW * ((current_time-start_timestamp) / (end_timestamp-start_timestamp)), 33, "rgb(64, 196, 255", 2); //中间播放点时间线
     if (!redrawFlag) {//只有第一次进入才需要添加事件
         this.add_events();
     }
     var time = start_timestamp + (this.hours_per_ruler * 3600 * 1000) / 2;
     this.ctx.fillStyle = "rgb(64, 196, 255";
     //画刻度线
-    this.ctx.fillText(this.changeTime(time), this.canvansW / 2 - 60, 50);
+    this.ctx.fillText(this.changeTime(current_time), this.canvansW * ((current_time-start_timestamp) / (end_timestamp-start_timestamp)) - 60, 50);
 
     if (this.markedStartTime != null) { //绘制标记的开始时间
         this.drawMarkPoint(this.markedStartTime, 1);
@@ -210,6 +221,7 @@ TimeSlider.prototype.dblclickFunc = function (e) {
  * 拖动/点击 mousedown事件
  */
 TimeSlider.prototype.mousedownFunc = function (e) {
+    console.log('mousedownFunc');
     this.g_isMousedown = true;
     this.g_mousedownCursor = this.get_cursor_x_position(e);//记住mousedown的位置
     clickRightHtml.style.display = "none";//每次右键都要把之前显示的菜单隐藏哦
@@ -220,6 +232,7 @@ TimeSlider.prototype.mousedownFunc = function (e) {
  */
 TimeSlider.prototype.mousemoveFunc = function (e) {
     var _this = this;
+    //获取鼠标posx
     var pos_x = _this.get_cursor_x_position(e);
     var px_per_ms = _this.canvansW / (_this.hours_per_ruler * 60 * 60 * 1000); // px/ms
     _this.clearCanvas();
@@ -228,7 +241,6 @@ TimeSlider.prototype.mousemoveFunc = function (e) {
         _this.start_timestamp = _this.start_timestamp - Math.round(diff_x / px_per_ms);
         _this.end_timestamp = _this.start_timestamp + (_this.hours_per_ruler * 3600 * 1000);
 
-        //console.log(_this.end_timestamp);
         if (_this.start_timestamp < _this.minTime) {
             _this.init(_this.minTime, _this.timecell, true);
         }
@@ -247,13 +259,26 @@ TimeSlider.prototype.mousemoveFunc = function (e) {
         _this.g_mousedownCursor = pos_x;
 
     } else {
+        //滑动
         let time = _this.start_timestamp + pos_x / px_per_ms;
-        _this.init(_this.start_timestamp, _this.timecell, true);
+        //保持绘制的线
+        _this.init(_this.start_timestamp, _this.timecell, true, _this.current_time, _this.end_timestamp);
+        //画鼠标当前的提示线
         _this.drawLine(pos_x, 0, pos_x, 50, "rgb(194, 202, 215)", 1);
         _this.ctx.fillStyle = "rgb(194, 202, 215)";
         _this.ctx.fillText(_this.changeTime(time), pos_x - 50, 60);
     }
 }
+
+/**
+ * 鼠标移出隐藏时间 mouseout事件
+ * @param {*} e
+ */
+TimeSlider.prototype.mouseoutFunc = function () {
+    var _this = this;
+    _this.clearCanvas();
+    _this.init(_this.start_timestamp, _this.timecell, true, _this.current_time, _this.end_timestamp);
+};
 
 /**
  * 拖动/点击 mouseup事件
@@ -272,7 +297,7 @@ TimeSlider.prototype.mouseupFunc = function (e) {
         // alert(_this.returnTime);
         //_this.set_time_to_middle(_this.returnTime);
     }
-}
+};
 
 TimeSlider.prototype.contextmenuFunc = function (e) {
     var _this = this;
@@ -360,15 +385,6 @@ TimeSlider.prototype.drawMarkPoint = function (markedTime, type) { //markedTime-
     }
 }
 
-/**
- * 鼠标移出隐藏时间 mouseout事件
- * @param {*} e
- */
-TimeSlider.prototype.mouseoutFunc = function () {
-    var _this = this;
-    _this.clearCanvas();
-    _this.init(_this.start_timestamp, _this.timecell, true);
-}
 
 /**
  * 滚轮放大缩小，以时间轴中心为准 mousewheel事件
@@ -386,8 +402,9 @@ TimeSlider.prototype.mousewheelFunc = function (event) {
     //IE、chrome浏览器使用的是wheelDelta，并且值为“正负120”，FF浏览器使用的是detail,其值为“正负3”
     //因为IE、chrome等向下滚动是负值，FF是正值，为了处理一致性，在此取反处理，所以下面是容错处理，获取滚轮是放大还是缩小，向上滚动是放大，向下滚动是缩小
     var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-    console.log(delta, 'delta');
+    console.log(_this.start_timestamp,'_this.start_timestamp ');
     var middle_time = _this.start_timestamp + (_this.hours_per_ruler * 3600 * 1000) / 2; //ms 记住当前中间的时间
+    console.log(middle_time,'middle_time');
     //delta<0是向下滚动，>0是向上滚动
     if (delta < 0) {
         _this.zoom = _this.zoom + 4;
@@ -402,10 +419,11 @@ TimeSlider.prototype.mousewheelFunc = function (event) {
         }
         _this.hours_per_ruler = _this.zoom;
     }
+    console.log(_this.hours_per_ruler,'_this.hours_per_ruler');
     //清空canvas
     _this.clearCanvas();
     _this.start_timestamp = middle_time - (_this.hours_per_ruler * 3600 * 1000) / 2; //start_timestamp = 当前中间的时间 - zoom/2
-    _this.init(_this.start_timestamp, _this.timecell, true)
+    _this.init(_this.start_timestamp, _this.timecell, true, _this.current_time, _this.end_timestamp)
 }
 
 /**
@@ -484,12 +502,26 @@ TimeSlider.prototype.ms_to_next_step = function (timestamp, step) {
 /**
  * 设置时间，让这个时间点跳到中间红线处
  *  @param {*} time 单位ms
+ *  @param {*} timecell 单位ms
  */
-TimeSlider.prototype.set_time_to_middle = function (time) {
+TimeSlider.prototype.set_time_to_middle = function (time, timecell) {
     this.clearCanvas();
     this.start_timestamp = time - (this.hours_per_ruler * 60 * 60 * 1000) / 2;
-    this.init(this.start_timestamp, this.timecell, true)
-}
+    this.init(this.start_timestamp, timecell, true)
+};
+
+
+/**
+ * 默认显示当天时间，如果传时间就按照传的时间来增加
+ *  @param {*} timecell 单位ms
+ */
+TimeSlider.prototype.move_to_current_time = function (start_time, current_time, end_time, timecell) {
+    this.clearCanvas();
+    this.start_timestamp = start_time;
+    this.current_time = current_time;
+    this.end_timestamp = end_time;
+    this.init(this.start_timestamp, timecell, true, current_time, this.end_timestamp)
+};
 
 /**
  * 返回点击或者拖动的时间点
@@ -513,8 +545,19 @@ TimeSlider.prototype.clearCanvas = function () {
 /**
  * 插件设置
  * @param {*} options
+ * @param {number} start_time 开始时间戳
+ * @param {number} end_time 结束时间戳
+ * @param {Array} cell 时间块数组
+ *                  {
+                        "beginTime":new Date().getTime()-0.5*3600*1000,
+                        "endTime":new Date().getTime(),
+                        "style": {
+                            "background":"rgba(132, 244, 180, 0.498039)"
+                        }
+                    },
+ * @param {*} callback
  */
-function Plugin(options, time, cell, callback) {
+function Plugin(options, start_time, current_time, end_time, cell, callback) {
     return this.each(function () {
         var _this = $(this);
         var _thisId = this.id;
@@ -529,20 +572,23 @@ function Plugin(options, time, cell, callback) {
                         data.clearMark();
                         break;
                     case 'setMarkType':
-                        data.setMarkType(time);
+                        data.setMarkType(start_time);
                         break;
                     case 'markPoint':
                         data.markPoint();
                         break;
                     case 'set_time_to_middle':
-                        data.set_time_to_middle(time);
+                        data.set_time_to_middle(start_time, cell);
+                        break;
+                    case 'move_to_current_time':
+                        data.move_to_current_time(start_time, current_time, end_time, cell);
                         break;
                     case 'returnMouseupTime':
                         data.returnMouseupTime(callback);
                         break;
                     case 'init':
                         data.clearCanvas();
-                        data.init(time, cell, true);
+                        data.init(start_time, cell, true);
                         break;
                 }
             }
