@@ -1,4 +1,5 @@
 var TimeSlider = function (elementId, options) {
+    var self = this;
     this.canvas = document.getElementById(elementId);
     this.ctx = this.canvas.getContext("2d");
     this.canvansW = this.canvas.width;
@@ -14,8 +15,14 @@ var TimeSlider = function (elementId, options) {
     this.graduation_step = 20;//刻度间最小宽度，单位px
     this.hours_per_ruler = 24;//时间轴显示24小时
     //this.start_timestamp = new Date().getTime() - 12*60*60*1000;
-    this.start_timestamp = new Date('2019-06-18 00:00:00').getTime();
-    this.end_timestamp = new Date('2019-06-18 23:59:59').getTime();//新增代码
+    //1毫秒的长度
+    this.px_per_ms = this.canvansW / (this.hours_per_ruler * 60 * 60 * 1000); // px/ms
+    //用来计算当前缩放等级最左侧的时间
+    this.ms_per_px = (this.hours_per_ruler * 3600 * 1000) / this.canvansW; // ms/px
+    // this.start_timestamp = new Date('2019-06-18 00:00:00').getTime();
+    this.start_timestamp = new Date(new Date(new Date().toLocaleDateString()).getTime()).getTime();
+    // this.end_timestamp = new Date('2019-06-18 23:59:59').getTime();//新增代码
+    this.end_timestamp = new Date( new Date( new Date().toLocaleDateString() ).getTime() + 24 * 60 * 60 * 1000 - 1).getTime();//新增代码
     this.current_time = new Date().getTime();   //
     this.minTime = new Date('2019-06-18 00:00:00').getTime();
     this.maxTime = new Date('2019-06-18 23:59:59').getTime();
@@ -34,6 +41,32 @@ var TimeSlider = function (elementId, options) {
 
     this.on_before_click_ruler_callback = null;
 
+    this.setTimeMove = null;
+
+    // //1秒延迟后设置到当前时间
+    // $("#setTimeMove").onclick = function(){
+    //     console.log(111);
+    //     clearInterval(self.setTimeMove);
+    //     self.setTimeMove = setInterval(function(){
+    //         /*模拟数据*/
+    //         var temporaryValue = [
+    //             {
+    //                 "beginTime": self.start_timestamp,
+    //                 "endTime": new Date().getTime(),
+    //                 "style": {
+    //                     "background":"rgba(132, 244, 180, 0.498039)"
+    //                 }
+    //             }
+    //         ];
+    //
+    //         self.move_to_current_time(self.start_timestamp, new Date().getTime(), self.end_timestamp, temporaryValue);
+    //     },1000)
+    // };
+    //
+    // $("#stopTimeMove").onclick = function(){
+    //     clearInterval(self.setTimeMove);
+    // };
+
     this.init(this.start_timestamp, this.timecell, false);
     return this;
 };
@@ -47,6 +80,8 @@ var TimeSlider = function (elementId, options) {
  * @param {*} end_timestamp 最右侧时间
  */
 TimeSlider.prototype.init = function (start_timestamp, timecell, redrawFlag, current_time, end_timestamp) {
+    console.log(start_timestamp,'start_timestamp');
+    console.log(new Date(start_timestamp).Format("yyyy-MM-dd hh:mm:ss"),'xxxxxxx');
     this.timecell = timecell;
     this.start_timestamp = start_timestamp;
     this.current_time = current_time;
@@ -221,7 +256,6 @@ TimeSlider.prototype.dblclickFunc = function (e) {
  * 拖动/点击 mousedown事件
  */
 TimeSlider.prototype.mousedownFunc = function (e) {
-    console.log('mousedownFunc');
     this.g_isMousedown = true;
     this.g_mousedownCursor = this.get_cursor_x_position(e);//记住mousedown的位置
     clickRightHtml.style.display = "none";//每次右键都要把之前显示的菜单隐藏哦
@@ -268,7 +302,58 @@ TimeSlider.prototype.mousemoveFunc = function (e) {
         _this.ctx.fillStyle = "rgb(194, 202, 215)";
         _this.ctx.fillText(_this.changeTime(time), pos_x - 50, 60);
     }
-}
+};
+
+
+/**
+ * 滚轮放大缩小，以时间轴中心为准 mousewheel事件
+ */
+TimeSlider.prototype.mousewheelFunc = function (event) {
+    if (event && event.preventDefault) {
+        event.preventDefault()
+    } else {
+        window.event.returnValue = false;
+        return false;
+    }
+
+    var e = window.event || event;
+
+
+    //IE、chrome浏览器使用的是wheelDelta，并且值为“正负120”，FF浏览器使用的是detail,其值为“正负3”
+    //因为IE、chrome等向下滚动是负值，FF是正值，为了处理一致性，在此取反处理，所以下面是容错处理，获取滚轮是放大还是缩小，向上滚动是放大，向下滚动是缩小
+    var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
+
+    //获取鼠标posx
+    var pos_x = this.get_cursor_x_position(e);
+    //获取当前时间
+    var currentTime = this.start_timestamp + pos_x * this.ms_per_px;
+    console.log(this.ms_per_px,'_this.ms_per_px');
+
+    // var middle_time = _this.start_timestamp + (_this.hours_per_ruler * 3600 * 1000) / 2; //ms 记住当前中间的时间
+    //delta<0是向下滚动，>0是向上滚动
+    if (delta < 0) {
+        this.zoom = this.zoom + 4;
+        if (this.zoom >= 24) {
+            this.zoom = 24;//放大最大24小时
+        }
+        this.hours_per_ruler = this.zoom;
+    } else if (delta > 0) {// 放大
+        this.zoom = this.zoom - 4;
+        if (this.zoom <= 1) {
+            this.zoom = 1;//缩小最小1小时
+        }
+        this.hours_per_ruler = this.zoom;
+    }
+    this.ms_per_px = (this.hours_per_ruler * 3600 * 1000) / this.canvansW;
+    console.log(this.ms_per_px,'_this.ms_per_px');
+
+    //清空canvas
+    this.clearCanvas();
+    //更新当前时间
+    this.start_timestamp = currentTime - (pos_x * this.ms_per_px); //start_timestamp = 鼠标悬停的当前时间 - 当前缩放等级下每个px的ms数 * 鼠标x坐标]
+    console.log(new Date(this.start_timestamp).Format("yyyy-MM-dd hh:mm:ss"),'sss');
+    this.init(this.start_timestamp, this.timecell, true, this.current_time, this.end_timestamp)
+};
 
 /**
  * 鼠标移出隐藏时间 mouseout事件
@@ -385,46 +470,6 @@ TimeSlider.prototype.drawMarkPoint = function (markedTime, type) { //markedTime-
     }
 }
 
-
-/**
- * 滚轮放大缩小，以时间轴中心为准 mousewheel事件
- */
-TimeSlider.prototype.mousewheelFunc = function (event) {
-    var _this = this;
-    if (event && event.preventDefault) {
-        event.preventDefault()
-    } else {
-        window.event.returnValue = false;
-        return false;
-    }
-
-    var e = window.event || event;
-    //IE、chrome浏览器使用的是wheelDelta，并且值为“正负120”，FF浏览器使用的是detail,其值为“正负3”
-    //因为IE、chrome等向下滚动是负值，FF是正值，为了处理一致性，在此取反处理，所以下面是容错处理，获取滚轮是放大还是缩小，向上滚动是放大，向下滚动是缩小
-    var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-    console.log(_this.start_timestamp,'_this.start_timestamp ');
-    var middle_time = _this.start_timestamp + (_this.hours_per_ruler * 3600 * 1000) / 2; //ms 记住当前中间的时间
-    console.log(middle_time,'middle_time');
-    //delta<0是向下滚动，>0是向上滚动
-    if (delta < 0) {
-        _this.zoom = _this.zoom + 4;
-        if (_this.zoom >= 24) {
-            _this.zoom = 24;//放大最大24小时
-        }
-        _this.hours_per_ruler = _this.zoom;
-    } else if (delta > 0) {// 放大
-        _this.zoom = _this.zoom - 4;
-        if (_this.zoom <= 1) {
-            _this.zoom = 1;//缩小最小1小时
-        }
-        _this.hours_per_ruler = _this.zoom;
-    }
-    console.log(_this.hours_per_ruler,'_this.hours_per_ruler');
-    //清空canvas
-    _this.clearCanvas();
-    _this.start_timestamp = middle_time - (_this.hours_per_ruler * 3600 * 1000) / 2; //start_timestamp = 当前中间的时间 - zoom/2
-    _this.init(_this.start_timestamp, _this.timecell, true, _this.current_time, _this.end_timestamp)
-}
 
 /**
  * 获取鼠标posx
